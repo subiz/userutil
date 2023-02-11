@@ -758,6 +758,20 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 	log.Println(acc.Id, cond, orderby, desc, "TOTAL", len(out), limit)
 
 	start = time.Now()
+
+	// filter by anchor
+	if anchor != "" {
+		valM["_start"] = anchor
+		goodout := []*header.User{}
+		for _, user := range out {
+			// skip less than anchor value
+			if LessVal("_start", user.Id, valM, desc) {
+				continue
+			}
+			goodout = append(goodout, user)
+		}
+		out = goodout
+	}
 	sort.Slice(out, func(i int, j int) bool {
 		return LessVal(out[i].Id, out[j].Id, valM, desc)
 	})
@@ -765,17 +779,9 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 	res := []*header.User{}
 
 	fmt.Println("FILTER SORT", acc.Id, time.Since(start), anchor)
-
-	valM["_start"] = anchor
 	for _, user := range out {
 		if len(res) >= limit {
 			break
-		}
-		if anchor != "" {
-			// skip less than anchor value
-			if LessVal("_start", user.Id, valM, desc) {
-				continue
-			}
 		}
 		res = append(res, user)
 	}
@@ -820,11 +826,19 @@ func MergeUserResult(dst, src []*header.User, anchor string, limit int, orderby 
 	}
 
 	var valM = map[string]string{}
+	valM["_start"] = anchor
+
 	out := []*header.User{}
 	for _, user := range userm {
-		out = append(out, user)
 		val := GetSortVal(orderby, user, defM)
 		valM[user.Id] = val
+		if anchor != "" {
+			// skip less than anchor value
+			if LessVal("_start", user.Id, valM, desc) {
+				continue
+			}
+		}
+		out = append(out, user)
 	}
 
 	sort.Slice(out, func(i int, j int) bool {
@@ -833,19 +847,6 @@ func MergeUserResult(dst, src []*header.User, anchor string, limit int, orderby 
 
 	res := []*header.User{}
 	fmt.Println("FILTER SORT", anchor)
-	valM["_start"] = anchor
-	for _, user := range out {
-		if len(res) >= limit {
-			break
-		}
-		if anchor != "" {
-			// skip less than anchor value
-			if LessVal("_start", user.Id, valM, desc) {
-				continue
-			}
-		}
-		res = append(res, user)
-	}
 
 	// filter duplicate
 	if len(res) > 0 {
