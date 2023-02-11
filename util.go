@@ -774,6 +774,15 @@ func evaluateSingleCond(acc *apb.Account, defM map[string]*header.AttributeDefin
 		return EvaluateText(u.FirstContentView != nil, u.GetFirstContentView().GetBy().GetDevice().GetUtm().GetContent(), cond.Text)
 	}
 
+	if cond.GetKey() == "segment" {
+		for _, seg := range u.Segments {
+			if EvaluateText(true, seg.GetSegmentId(), cond.Text) {
+				return true
+			}
+		}
+		return false
+	}
+
 	if strings.HasPrefix(cond.GetKey(), "attr:") || strings.HasPrefix(cond.GetKey(), "attr.") {
 		key := cond.GetKey()[5:]
 
