@@ -7,8 +7,8 @@ github.com/subiz/executor/v2 v2.0.3 h1:sjUGypL5n/L+i6EhhF1TeHvofKXcHzqbBGkLWgYTp
 github.com/subiz/executor/v2 v2.0.3/go.mod h1:OtujicyEl4kgUnQX+8GV2alYtS27qV7UtOt3MUh8NIg=
 github.com/subiz/goutils v0.1.16 h1:FMly+ZxdA8PDfYtsIev28queRiIqtMvGtJuY0+w0jdg=
 github.com/subiz/goutils v0.1.16/go.mod h1:PExK897ex/PxMW0ucopKoIP0zfl6VJQ4MBpTb6Acubk=
-github.com/subiz/header v1.10.81 h1:sJr6InWKGk0o+/DA+Z+FCCLQPkRa1sTCykI+Smoucko=
-github.com/subiz/header v1.10.81/go.mod h1:K3ZGVJ6iTmlouRaf5VwIKZm+fQOKzOXhXQsaSYqxYx4=
+github.com/subiz/header v1.10.82 h1:8ZBjEru4Nwg00uvky02lOiKtcB4T92pEaJsElE/Xchw=
+github.com/subiz/header v1.10.82/go.mod h1:K3ZGVJ6iTmlouRaf5VwIKZm+fQOKzOXhXQsaSYqxYx4=
 github.com/thanhpk/ascii v0.0.4 h1:fu/NHc8cNNnncA0aBsxFDT+KboCAD0+ITRi72B6e84M=
 github.com/thanhpk/ascii v0.0.4/go.mod h1:soDfGTRtVFNq5lM9eLxkMlnGWlzau+jfiPYC1vjt4lU=
 golang.org/x/net v0.6.0 h1:L4ZwwTvKW9gr0ZMS1yrHD9GZhIuVjOBBnaKH+SPQK0Q=

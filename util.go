@@ -398,183 +398,7 @@ func EvaluateDatetime(acc *apb.Account, found bool, accid string, unixms int64, 
 	return true
 }
 
-func PureEvaluateDatetime(found bool, acc *apb.Account, unixms int64, cond *header.DatetimeCondition) bool {
-	t := time.Unix(unixms/1000, 0)
-
-	switch cond.GetOp() {
-	case "any":
-		return true
-	case "unset":
-		return !found
-	case "has_value":
-		return found
-	// apply transform first
-	case "in_business_hour":
-		inbusinesshours, _ := business_hours.DuringBusinessHour(acc.GetBusinessHours(), t, acc.GetTimezone())
-		return inbusinesshours
-	case "non_business_hour":
-		inbusinesshours, _ := business_hours.DuringBusinessHour(acc.GetBusinessHours(), t, acc.GetTimezone())
-		return !inbusinesshours
-	case "today":
-		utc := time.Now().UTC()
-		startoftheday := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, utc.Location())
-		endoftheday := time.Date(utc.Year(), utc.Month(), utc.Day(), 23, 59, 59, 0, utc.Location())
-		h, m, _ := business_hours.SplitTzOffset(acc.GetTimezone())
-		tzsec := int64(h*3600 + m*60)
-		if startoftheday.Unix()+tzsec <= t.Unix() && t.Unix() <= endoftheday.Unix()+tzsec {
-			return true
-		}
-		return false
-	case "yesterday":
-		utc := time.Now().UTC()
-		startoftheday := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, utc.Location())
-		weekday := int64(startoftheday.Weekday())
-		weekday--
-		if weekday == -1 {
-			weekday = 7
-		}
-		startoftheweek := time.Unix(startoftheday.Unix()-weekday*86400, 0)
-		endoftheweek := time.Unix(startoftheday.Unix()*(7-weekday)*86400+86400, 0)
-		// endoftheday := time.Date(utc.Year(), utc.Month(), utc.Day(), 23, 59, 59, 0, utc.Location())
-
-		h, m, _ := business_hours.SplitTzOffset(acc.GetTimezone())
-		tzsec := int64(h*3600 + m*60)
-		if startoftheweek.Unix()+tzsec <= t.Unix() && t.Unix() <= endoftheweek.Unix()+tzsec {
-			return true
-		}
-		return false
-	case "last_week":
-		utc := time.Now().UTC()
-		startoftheday := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, utc.Location())
-		weekday := int64(startoftheday.Weekday())
-		weekday--
-		if weekday == -1 {
-			weekday = 7
-		}
-		startoftheweek := time.Unix(startoftheday.Unix()-weekday*86400, 0)
-		endoftheweek := time.Unix(startoftheday.Unix()*(7-weekday)*86400+86400, 0)
-		// endoftheday := time.Date(utc.Year(), utc.Month(), utc.Day(), 23, 59, 59, 0, utc.Location())
-
-		h, m, _ := business_hours.SplitTzOffset(acc.GetTimezone())
-		tzsec := int64(h*3600 + m*60)
-		if startoftheweek.Unix()-604800+tzsec <= t.Unix() && t.Unix() <= endoftheweek.Unix()-604800+tzsec { // 604800 is to move back 7 day
-			return true
-		}
-		return false
-	case "this_week":
-		utc := time.Now().UTC()
-		startoftheday := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, utc.Location())
-		weekday := int64(startoftheday.Weekday())
-		weekday--
-		if weekday == -1 {
-			weekday = 7
-		}
-		startoftheweek := time.Unix(startoftheday.Unix()-weekday*86400, 0)
-		endoftheweek := time.Unix(startoftheday.Unix()*(7-weekday)*86400+86400, 0)
-		// endoftheday := time.Date(utc.Year(), utc.Month(), utc.Day(), 23, 59, 59, 0, utc.Location())
-
-		h, m, _ := business_hours.SplitTzOffset(acc.GetTimezone())
-		tzsec := int64(h*3600 + m*60)
-		if startoftheweek.Unix()+tzsec <= t.Unix() && t.Unix() <= endoftheweek.Unix()+tzsec { // 604800 is to move back 7 day
-			return true
-		}
-		return false
-	case "last_month":
-		utc := time.Now().UTC()
-		endOfMonth := time.Date(utc.Year(), utc.Month(), 1, 0, 0, 0, 0, utc.Location())
-		endOfMonth = endOfMonth.AddDate(0, 0, -1)
-
-		startOfMonth := time.Date(endOfMonth.Year(), endOfMonth.Month(), 1, 0, 0, 0, 0, utc.Location())
-		h, m, _ := business_hours.SplitTzOffset(acc.GetTimezone())
-		tzsec := int64(h*3600 + m*60)
-		if startOfMonth.Unix()+tzsec <= t.Unix() && t.Unix() <= endOfMonth.Unix()+tzsec {
-			return true
-		}
-		return false
-	case "this_month":
-		utc := time.Now().UTC()
-		firstOfMonth := time.Date(utc.Year(), utc.Month(), 1, 0, 0, 0, 0, utc.Location())
-		lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
-
-		h, m, _ := business_hours.SplitTzOffset(acc.GetTimezone())
-		tzsec := int64(h*3600 + m*60)
-		if firstOfMonth.Unix()+tzsec <= t.Unix() && t.Unix() <= lastOfMonth.Unix()+tzsec {
-			return true
-		}
-		return false
-	case "last":
-		a := time.Now().Unix() - cond.GetLast()
-		b := time.Now().Unix()
-		return a <= t.Unix() && t.Unix() <= b
-	case "before_ago":
-		return t.Unix() < time.Now().Unix()-cond.GetBeforeAgo()
-	case "days_of_week":
-		for _, weekday := range cond.GetDaysOfWeek() {
-			if strings.EqualFold(weekday, t.Weekday().String()) {
-				return true
-			}
-		}
-		return false
-	case "after":
-		return time.Unix(cond.GetAfter()/1000, 0).Unix() <= t.Unix()
-	case "before":
-		return t.Unix() <= time.Unix(cond.GetBefore()/1000, 0).Unix()
-	case "between":
-		if len(cond.GetBetween()) != 2 {
-			return true
-		}
-		a := cond.GetBetween()[0] / 1000
-		b := cond.GetBetween()[1] / 1000
-		return a <= t.Unix() && t.Unix() <= b
-	case "outside":
-		if len(cond.GetOutside()) != 2 {
-			return true
-		}
-		a := time.Unix(cond.GetOutside()[0]/1000, 0).Unix()
-		b := time.Unix(cond.GetOutside()[1]/1000, 0).Unix()
-		return t.Unix() <= a || b <= t.Unix()
-	}
-	return true
-}
-
 const Tolerance = 0.000001
-
-func CheckAttr(u *header.User, key, value, typ string) bool {
-	text, num, _, _, _, found := FindAttr(u, key, typ)
-	if !found {
-		return false
-	}
-
-	if typ == "number" {
-		thenum, _ := strconv.Atoi(value)
-		return thenum == int(num)
-	}
-
-	if text == "" {
-		return false
-	}
-	if key == "phones" {
-		phones := strings.Split(text, ",")
-		for _, p := range phones {
-			p = header.NormPhone(p)
-			if p == value {
-				return true
-			}
-		}
-	}
-
-	if key == "emails" {
-		emails := strings.Split(text, ",")
-		for _, em := range emails {
-			em = strings.TrimSpace(em)
-			if em == value {
-				return true
-			}
-		}
-	}
-
-	return value == text
-}
 
 func RsCheck(acc *apb.Account, defM map[string]*header.AttributeDefinition, u *header.User, cond *header.UserViewCondition) bool {
 	if len(cond.GetOne()) > 0 {
@@ -780,6 +604,12 @@ func evaluateSingleCond(acc *apb.Account, defM map[string]*header.AttributeDefin
 				return true
 			}
 		}
+
+		if len(u.Labels) == 0 {
+			if EvaluateText(false, "", cond.Text) {
+				return true
+			}
+		}
 		return false
 	}
 
@@ -867,7 +697,7 @@ func SpaceStringsBuilder(str string) string {
 	return b.String()
 }
 
-func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*header.User, limit int, orderby string, defM map[string]*header.AttributeDefinition) (*header.Users, error) {
+func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*header.User, anchor string, limit int, orderby string, defM map[string]*header.AttributeDefinition) *header.Users {
 	if orderby == "" {
 		orderby = "-id"
 	}
@@ -889,7 +719,6 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 		}
 		goodleads = append(goodleads, lead)
 	}
-
 	leads = goodleads
 
 	start := time.Now()
@@ -919,7 +748,6 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 		}
 
 		val := GetSortVal(orderby, u, defM)
-
 		lock.Lock()
 		valM[u.Id] = val
 		out = append(out, u)
@@ -934,22 +762,97 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 		return LessVal(out[i].Id, out[j].Id, valM, desc)
 	})
 
-	fmt.Println("FILTER SORT", acc.Id, time.Since(start))
-
-	// endoffset := offset
 	res := []*header.User{}
-	sortedValues := make([]string, 0)
-	offset := 0
-	for i := offset; i < offset+limit; i++ {
-		if i >= len(out) {
+
+	fmt.Println("FILTER SORT", acc.Id, time.Since(start), anchor)
+
+	valM["_start"] = anchor
+	for _, user := range out {
+		if len(res) >= limit {
 			break
 		}
-		res = append(res, out[i])
-		sortedValues = append(sortedValues, valM[out[i].GetId()])
-		// endoffset = i
+		if anchor != "" {
+			// skip less than anchor value
+			if LessVal("_start", user.Id, valM, desc) {
+				continue
+			}
+		}
+		res = append(res, user)
 	}
 
-	return &header.Users{Users: res, Hit: int64(len(res)), Total: int64(len(out)), SortedValues: sortedValues}, nil
+	if len(res) > 0 {
+		anchor = valM[res[len(res)-1].Id]
+	}
+
+	return &header.Users{Users: res, Hit: int64(len(res)), Total: int64(len(out)), Anchor: anchor}
+}
+
+func MergeUserResult(dst, src []*header.User, anchor string, limit int, orderby string, defM map[string]*header.AttributeDefinition) *header.Users {
+	if orderby == "" {
+		orderby = "-id"
+	}
+
+	desc := false
+	if orderby[0] != '-' && orderby[0] != '+' {
+		desc = true
+	} else {
+		if orderby[0] == '-' {
+			desc = true
+		}
+		orderby = orderby[1:]
+	}
+
+	userm := map[string]*header.User{}
+
+	for _, user := range dst {
+		if user.PrimaryId != "" {
+			continue
+		}
+		userm[user.Id] = user
+	}
+
+	// override dst
+	for _, user := range src {
+		if user.PrimaryId != "" {
+			continue
+		}
+		userm[user.Id] = user
+	}
+
+	var valM = map[string]string{}
+	out := []*header.User{}
+	for _, user := range userm {
+		out = append(out, user)
+		val := GetSortVal(orderby, user, defM)
+		valM[user.Id] = val
+	}
+
+	sort.Slice(out, func(i int, j int) bool {
+		return LessVal(out[i].Id, out[j].Id, valM, desc)
+	})
+
+	res := []*header.User{}
+	fmt.Println("FILTER SORT", anchor)
+	valM["_start"] = anchor
+	for _, user := range out {
+		if len(res) >= limit {
+			break
+		}
+		if anchor != "" {
+			// skip less than anchor value
+			if LessVal("_start", user.Id, valM, desc) {
+				continue
+			}
+		}
+		res = append(res, user)
+	}
+
+	// filter duplicate
+	if len(res) > 0 {
+		anchor = valM[res[len(res)-1].Id]
+	}
+
+	return &header.Users{Users: res, Hit: int64(len(res)), Total: int64(len(out)), Anchor: anchor}
 }
 
 func LessVal(iid, jid string, valM map[string]string, desc bool) bool {
@@ -987,7 +890,6 @@ func LessVal(iid, jid string, valM map[string]string, desc bool) bool {
 		return !less
 	}
 	return less
-
 }
 
 func GetSortVal(orderby string, u *header.User, defM map[string]*header.AttributeDefinition) string {
