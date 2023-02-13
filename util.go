@@ -832,10 +832,18 @@ func MergeUserResult(dst, src *header.Users, anchor string, limit int, orderby s
 	var valM = map[string]string{}
 	anchorsplit := strings.Split(anchor, ".")
 	out := []*header.User{}
+	for _, user := range userm {
+		val := GetSortVal(orderby, user, defM)
+		valM[user.Id] = val
+		out = append(out, user)
+	}
+
+	// filter by anchor
 	if len(anchorsplit) > 1 {
 		anchorUserId := anchorsplit[len(anchorsplit)-1]
 		valM[anchorUserId] = strings.Join(anchorsplit[:len(anchorsplit)-1], ".")
-		for _, user := range userm {
+		goodout := []*header.User{}
+		for _, user := range out {
 			// ignore the item that already in the anchor
 			if user.Id == anchorUserId {
 				continue
@@ -845,13 +853,9 @@ func MergeUserResult(dst, src *header.Users, anchor string, limit int, orderby s
 			if LessVal(anchorUserId, user.Id, valM, desc) {
 				continue
 			}
-			out = append(out, user)
+			goodout = append(goodout, user)
 		}
-	} else {
-		// invalid anchor, valid anchor must be 'value.user_id'
-		for _, user := range userm {
-			out = append(out, user)
-		}
+		out = goodout
 	}
 
 	sort.Slice(out, func(i int, j int) bool {
