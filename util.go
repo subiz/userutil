@@ -1000,6 +1000,7 @@ func GetSortVal(orderby string, user *header.User, defM map[string]*header.Attri
 }
 
 const UserQueryURL = "https://user-query-66xno24cra-as.a.run.app/query"
+const UserCountURL = "https://user-query-66xno24cra-as.a.run.app/count"
 
 func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, defM map[string]*header.AttributeDefinition, anchor, orderby string, limit int, ignoreIds []string) (*header.Users, error) {
 	accid := acc.GetId()
@@ -1085,7 +1086,7 @@ func DoCount(version int, acc *apb.Account, conds []*header.UserViewCondition, d
 			start := time.Now()
 			query.Add("path", accid+"_"+strconv.Itoa(i)+"_v"+strconv.Itoa(version)+".dat")
 
-			resp, err := http.Post(UserQueryURL+"?"+query.Encode(), "application/json", bytes.NewBuffer(body))
+			resp, err := http.Post(UserCountURL+"?"+query.Encode(), "application/json", bytes.NewBuffer(body))
 			if err != nil {
 				outerr[i] = err
 				return
