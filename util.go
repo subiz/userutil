@@ -771,7 +771,7 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 			}
 
 			// skip less than anchor value
-			if LessVal(anchorUserId, user.Id, valM, desc) {
+			if LessVal(user.Id, anchorUserId, valM, desc) {
 				continue
 			}
 			goodout = append(goodout, user)
@@ -849,7 +849,7 @@ func MergeUserResult(dst, src *header.Users, anchor string, limit int, orderby s
 			}
 
 			// skip less than anchor value
-			if LessVal(anchorUserId, user.Id, valM, desc) {
+			if LessVal(user.Id, anchorUserId, valM, desc) {
 				continue
 			}
 			goodout = append(goodout, user)
