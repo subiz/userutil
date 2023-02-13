@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/subiz/executor/v2 v2.0.3
 	github.com/subiz/goutils v0.1.16
-	github.com/subiz/header v1.10.82
+	github.com/subiz/header v1.10.84
 	github.com/thanhpk/ascii v0.0.4
 )
 
