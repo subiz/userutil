@@ -757,14 +757,21 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 	log.Println(acc.Id, cond, orderby, desc, "TOTAL", len(out), limit)
 
 	start = time.Now()
+	anchorsplit := strings.Split(anchor, ".")
 
 	// filter by anchor
-	if anchor != "" {
-		valM["_start"] = anchor
+	if len(anchorsplit) > 1 {
+		anchorUserId := anchorsplit[len(anchorsplit)-1]
+		valM[anchorUserId] = strings.Join(anchorsplit[:len(anchorsplit)-1], ".")
 		goodout := []*header.User{}
 		for _, user := range out {
+			// ignore the item that already in the anchor
+			if user.Id == anchorUserId {
+				continue
+			}
+
 			// skip less than anchor value
-			if LessVal("_start", user.Id, valM, desc) {
+			if LessVal(anchorUserId, user.Id, valM, desc) {
 				continue
 			}
 			goodout = append(goodout, user)
@@ -786,7 +793,8 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 	}
 
 	if len(res) > 0 {
-		anchor = valM[res[len(res)-1].Id]
+		lastUserId := res[len(res)-1].Id
+		anchor = valM[lastUserId] + "." + lastUserId
 	}
 
 	return &header.Users{Users: res, Hit: int64(len(res)), Total: int64(len(out)), Anchor: anchor}
@@ -796,7 +804,6 @@ func MergeUserResult(dst, src *header.Users, anchor string, limit int, orderby s
 	if orderby == "" {
 		orderby = "-id"
 	}
-
 	desc := false
 	if orderby[0] != '-' && orderby[0] != '+' {
 		desc = true
@@ -804,11 +811,9 @@ func MergeUserResult(dst, src *header.Users, anchor string, limit int, orderby s
 		if orderby[0] == '-' {
 			desc = true
 		}
-		orderby = orderby[1:]
 	}
 
 	userm := map[string]*header.User{}
-
 	for _, user := range dst.GetUsers() {
 		if user.PrimaryId != "" {
 			continue
@@ -825,19 +830,28 @@ func MergeUserResult(dst, src *header.Users, anchor string, limit int, orderby s
 	}
 
 	var valM = map[string]string{}
-	valM["_start"] = anchor
-
+	anchorsplit := strings.Split(anchor, ".")
 	out := []*header.User{}
-	for _, user := range userm {
-		val := GetSortVal(orderby, user, defM)
-		valM[user.Id] = val
-		if anchor != "" {
-			// skip less than anchor value
-			if LessVal("_start", user.Id, valM, desc) {
+	if len(anchorsplit) > 1 {
+		anchorUserId := anchorsplit[len(anchorsplit)-1]
+		valM[anchorUserId] = strings.Join(anchorsplit[:len(anchorsplit)-1], ".")
+		for _, user := range userm {
+			// ignore the item that already in the anchor
+			if user.Id == anchorUserId {
 				continue
 			}
+
+			// skip less than anchor value
+			if LessVal(anchorUserId, user.Id, valM, desc) {
+				continue
+			}
+			out = append(out, user)
 		}
-		out = append(out, user)
+	} else {
+		// invalid anchor, valid anchor must be 'value.user_id'
+		for _, user := range userm {
+			out = append(out, user)
+		}
 	}
 
 	sort.Slice(out, func(i int, j int) bool {
@@ -849,7 +863,8 @@ func MergeUserResult(dst, src *header.Users, anchor string, limit int, orderby s
 
 	// filter duplicate
 	if len(res) > 0 {
-		anchor = valM[res[len(res)-1].Id]
+		lastUserId := res[len(res)-1].Id
+		anchor = valM[lastUserId] + "." + lastUserId
 	}
 
 	return &header.Users{Users: res, Hit: int64(len(res)), Total: dst.GetTotal() + src.GetTotal(), Anchor: anchor}
@@ -857,15 +872,22 @@ func MergeUserResult(dst, src *header.Users, anchor string, limit int, orderby s
 
 func LessVal(iid, jid string, valM map[string]string, desc bool) bool {
 	less := false
-
 	if valM[iid][0] == 's' {
-		less = valM[iid] < valM[jid]
+		if valM[iid] == valM[jid] {
+			less = iid < jid
+		} else {
+			less = valM[iid] < valM[jid]
+		}
 	}
 
 	if valM[iid][0] == 'f' {
 		fi, _ := strconv.ParseFloat(valM[iid][1:], 64)
 		fj, _ := strconv.ParseFloat(valM[jid][1:], 64)
-		less = fi < fj
+		if math.Abs(fj-fj) < 0.00001 {
+			less = iid < jid
+		} else {
+			less = fi < fj
+		}
 	}
 
 	if valM[iid][0] == 'l' {
@@ -881,6 +903,9 @@ func LessVal(iid, jid string, valM map[string]string, desc bool) bool {
 			less = true
 		} else if leni == lenj {
 			less = vali < valj
+			if vali == valj {
+				less = iid < jid
+			}
 		} else {
 			less = false
 		}
@@ -892,27 +917,34 @@ func LessVal(iid, jid string, valM map[string]string, desc bool) bool {
 	return less
 }
 
-func GetSortVal(orderby string, u *header.User, defM map[string]*header.AttributeDefinition) string {
+func GetSortVal(orderby string, user *header.User, defM map[string]*header.AttributeDefinition) string {
+	if orderby == "" {
+		orderby = "id"
+	}
+	if orderby[0] == '-' || orderby[0] == '+' {
+		orderby = orderby[1:]
+	}
+
 	var val = "s"
 	if orderby == "id" {
-		val = "s" + u.Id
+		val = "s" + user.Id
 	}
 	if orderby == "lead_owners" {
-		val = "l" + strconv.Itoa(len(u.LeadOwners)) + "." + strings.Join(u.LeadOwners, ",")
+		val = "l" + strconv.Itoa(len(user.LeadOwners)) + "." + strings.Join(user.LeadOwners, ",")
 	}
 	if orderby == "labels" {
 		val = ""
-		for _, l := range u.Labels {
+		for _, l := range user.Labels {
 			val += l.Label
 		}
-		val = "l" + strconv.Itoa(len(u.Labels)) + "." + val
+		val = "l" + strconv.Itoa(len(user.Labels)) + "." + val
 	}
 
 	if strings.HasPrefix(orderby, "attr:") || strings.HasPrefix(orderby, "attr.") {
 		key := orderby[5:]
 		def := defM[key]
 		if def != nil {
-			text, num, date, boo, list, _ := FindAttr(u, key, def.Type)
+			text, num, date, boo, list, _ := FindAttr(user, key, def.Type)
 			if def.Type == "text" || def.Type == "" {
 				val = "s" + text
 			}
