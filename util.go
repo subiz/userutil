@@ -796,7 +796,6 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 		lastUserId := res[len(res)-1].Id
 		anchor = valM[lastUserId] + "." + lastUserId
 	}
-
 	return &header.Users{Users: res, Hit: int64(len(res)), Total: int64(len(out)), Anchor: anchor}
 }
 
@@ -863,7 +862,13 @@ func MergeUserResult(dst, src *header.Users, anchor string, limit int, orderby s
 	})
 
 	res := []*header.User{}
-	fmt.Println("FILTER SORT", anchor)
+	fmt.Println("FILTER SORT", anchor, len(out))
+	for _, user := range out {
+		if len(res) >= limit {
+			break
+		}
+		res = append(res, user)
+	}
 
 	// filter duplicate
 	if len(res) > 0 {
