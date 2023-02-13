@@ -701,7 +701,45 @@ func SpaceStringsBuilder(str string) string {
 	return b.String()
 }
 
-func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*header.User, anchor string, limit int, orderby string, defM map[string]*header.AttributeDefinition) *header.Users {
+func PureCountUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*header.User, defM map[string]*header.AttributeDefinition, ignoreIds map[string]bool) int64 {
+	var total int64
+	executor.Async(len(leads), func(i int, lock *sync.Mutex) {
+		u := leads[i]
+		if u.Id == "" {
+			return
+		}
+		if u.PrimaryId != "" {
+			return
+		}
+		if ignoreIds[u.Id] {
+			return
+		}
+		if !RsCheck(acc, defM, u, cond) {
+			if len(u.SecondaryIds) == 0 {
+				return
+			}
+			check := false
+			for _, sec := range u.Secondaries {
+				if RsCheck(acc, defM, sec, cond) {
+					check = true
+					break
+				}
+			}
+			if !check {
+				return
+			}
+			// pass
+		}
+
+		lock.Lock()
+		total++
+		lock.Unlock()
+	}, 20)
+
+	return total
+}
+
+func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*header.User, anchor string, limit int, orderby string, defM map[string]*header.AttributeDefinition, ignoreIds map[string]bool) *header.Users {
 	if orderby == "" {
 		orderby = "-id"
 	}
@@ -716,15 +754,6 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 		orderby = orderby[1:]
 	}
 
-	goodleads := []*header.User{}
-	for _, lead := range leads {
-		if lead.PrimaryId != "" {
-			continue
-		}
-		goodleads = append(goodleads, lead)
-	}
-	leads = goodleads
-
 	start := time.Now()
 	out := make([]*header.User, 0)
 	var valM = map[string]string{}
@@ -738,6 +767,14 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 	executor.Async(len(leads), func(i int, lock *sync.Mutex) {
 		u := leads[i]
 		if u.Id == "" {
+			return
+		}
+
+		if u.PrimaryId != "" {
+			return
+		}
+
+		if ignoreIds[u.Id] {
 			return
 		}
 
@@ -854,7 +891,6 @@ func MergeUserResult(dst, src *header.Users, limit int, orderby string, defM map
 	}
 
 	anchor := ""
-	// filter duplicate
 	if len(res) > 0 {
 		lastUserId := res[len(res)-1].Id
 		anchor = valM[lastUserId] + "." + lastUserId
@@ -965,9 +1001,14 @@ func GetSortVal(orderby string, user *header.User, defM map[string]*header.Attri
 
 const UserQueryURL = "https://user-query-66xno24cra-as.a.run.app/query"
 
-func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, defM map[string]*header.AttributeDefinition, anchor, orderby string, limit int) (*header.Users, error) {
+func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, defM map[string]*header.AttributeDefinition, anchor, orderby string, limit int, ignoreIds []string) (*header.Users, error) {
 	accid := acc.GetId()
-	userQuery := &header.UserQueryBody{Condition: cond, Account: acc, Def: defM}
+	userQuery := &header.UserQueryBody{
+		Condition:  cond,
+		Account:    &apb.Account{Id: &accid, Timezone: acc.Timezone, BusinessHours: acc.BusinessHours},
+		Def:        defM,
+		IgnoreUids: ignoreIds,
+	}
 	body, _ := json.Marshal(userQuery)
 	wg := sync.WaitGroup{}
 	lock := &sync.Mutex{}
@@ -1017,4 +1058,66 @@ func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, def
 		}
 	}
 	return res, nil
+}
+
+func DoCount(version int, acc *apb.Account, conds []*header.UserViewCondition, defM map[string]*header.AttributeDefinition, ignoreIds []string) ([]int64, error) {
+	if len(conds) == 0 {
+		return []int64{}, nil
+	}
+	accid := acc.GetId()
+	userQuery := &header.UserCountBody{
+		Conditions: conds,
+		Account:    &apb.Account{Id: &accid, Timezone: acc.Timezone, BusinessHours: acc.BusinessHours},
+		Def:        defM,
+		IgnoreUids: ignoreIds,
+	}
+	body, _ := json.Marshal(userQuery)
+	wg := sync.WaitGroup{}
+	lock := &sync.Mutex{}
+	wg.Add(NPartition)
+	var outerr = make([]error, NPartition)
+	totals := make([]int64, len(conds))
+
+	for i := 0; i < NPartition; i++ {
+		go func(i int) {
+			defer wg.Done()
+			query := url.Values{}
+			start := time.Now()
+			query.Add("path", accid+"_"+strconv.Itoa(i)+"_v"+strconv.Itoa(version)+".dat")
+
+			resp, err := http.Post(UserQueryURL+"?"+query.Encode(), "application/json", bytes.NewBuffer(body))
+			if err != nil {
+				outerr[i] = err
+				return
+			}
+
+			out, err := ioutil.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				outerr[i] = err
+				return
+			}
+
+			segments := &header.Segments{}
+			if err := json.Unmarshal(out, segments); err != nil {
+				fmt.Println(accid, "NO1", query.Encode(), string(out), "\nBODY\n", string(body))
+				outerr[i] = header.E500(err, header.E_invalid_json, accid, i)
+				return
+			}
+
+			lock.Lock()
+			for j, seg := range segments.GetSegments() {
+				totals[j] = totals[j] + seg.GetTotal()
+			}
+			lock.Unlock()
+			fmt.Println("OUT", i, len(out), time.Since(start))
+		}(i)
+	}
+	wg.Wait()
+	for _, err := range outerr {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return totals, nil
 }
