@@ -155,7 +155,6 @@ func EvaluateText(has bool, str string, cond *header.TextCondition) bool {
 		}
 		return true
 	case "not_start_with":
-
 		for _, cs := range cond.GetNotStartWith() {
 			if !cond.GetCaseSensitive() {
 				cs = strings.ToLower(cs)
@@ -793,7 +792,7 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 	return &header.Users{Users: res, Hit: int64(len(res)), Total: int64(len(out)), Anchor: anchor}
 }
 
-func MergeUserResult(dst, src []*header.User, anchor string, limit int, orderby string, defM map[string]*header.AttributeDefinition) *header.Users {
+func MergeUserResult(dst, src *header.Users, anchor string, limit int, orderby string, defM map[string]*header.AttributeDefinition) *header.Users {
 	if orderby == "" {
 		orderby = "-id"
 	}
@@ -810,7 +809,7 @@ func MergeUserResult(dst, src []*header.User, anchor string, limit int, orderby 
 
 	userm := map[string]*header.User{}
 
-	for _, user := range dst {
+	for _, user := range dst.GetUsers() {
 		if user.PrimaryId != "" {
 			continue
 		}
@@ -818,7 +817,7 @@ func MergeUserResult(dst, src []*header.User, anchor string, limit int, orderby 
 	}
 
 	// override dst
-	for _, user := range src {
+	for _, user := range src.GetUsers() {
 		if user.PrimaryId != "" {
 			continue
 		}
@@ -853,7 +852,7 @@ func MergeUserResult(dst, src []*header.User, anchor string, limit int, orderby 
 		anchor = valM[res[len(res)-1].Id]
 	}
 
-	return &header.Users{Users: res, Hit: int64(len(res)), Total: int64(len(out)), Anchor: anchor}
+	return &header.Users{Users: res, Hit: int64(len(res)), Total: dst.GetTotal() + src.GetTotal(), Anchor: anchor}
 }
 
 func LessVal(iid, jid string, valM map[string]string, desc bool) bool {
