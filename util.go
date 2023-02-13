@@ -1,8 +1,13 @@
 package userutil
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math"
+	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -19,6 +24,7 @@ import (
 )
 
 const Tolerance = 0.000001
+const NPartition = 50
 
 func applyTextTransform(str string, transforms []*header.TextTransform) string {
 	if len(transforms) == 0 {
@@ -755,13 +761,13 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 		total++
 		val := GetSortVal(orderby, u, defM)
 		lock.Lock()
+		defer lock.Unlock()
+
 		valM[u.Id] = val
 		if anchorUserId == "" {
 			out = append(out, u)
-			lock.Unlock()
 			return
 		}
-		lock.Unlock()
 
 		// ignore the item that already in the anchor
 		if u.Id == anchorUserId {
@@ -772,12 +778,10 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 		if LessVal(u.Id, anchorUserId, valM, desc) {
 			return
 		}
-		lock.Lock()
 		out = append(out, u)
-		lock.Unlock()
 	}, 20)
 
-	fmt.Println("FILTER0", acc.Id, len(out), time.Since(start))
+	fmt.Println("FILTER0", acc.GetId(), len(out), time.Since(start))
 
 	start = time.Now()
 	sort.Slice(out, func(i int, j int) bool {
@@ -785,7 +789,7 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 	})
 
 	res := []*header.User{}
-	fmt.Println("FILTER SORT", acc.Id, time.Since(start), len(out), anchor)
+	fmt.Println("FILTER SORT", acc.GetId(), time.Since(start), len(out), anchor)
 	for _, user := range out {
 		if len(res) >= limit {
 			break
@@ -797,7 +801,7 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 		lastUserId := res[len(res)-1].Id
 		anchor = valM[lastUserId] + "." + lastUserId
 	}
-	return &header.Users{Users: res, Hit: int64(len(res)), Total: int64(len(out)), Anchor: anchor}
+	return &header.Users{Users: res, Hit: int64(len(res)), Total: int64(total), Anchor: anchor}
 }
 
 func MergeUserResult(dst, src *header.Users, limit int, orderby string, defM map[string]*header.AttributeDefinition) *header.Users {
@@ -957,4 +961,60 @@ func GetSortVal(orderby string, user *header.User, defM map[string]*header.Attri
 		}
 	}
 	return val
+}
+
+const UserQueryURL = "https://user-query-66xno24cra-as.a.run.app/query"
+
+func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, defM map[string]*header.AttributeDefinition, anchor, orderby string, limit int) (*header.Users, error) {
+	accid := acc.GetId()
+	userQuery := &header.UserQueryBody{Condition: cond, Account: acc, Def: defM}
+	body, _ := json.Marshal(userQuery)
+	wg := sync.WaitGroup{}
+	lock := &sync.Mutex{}
+	res := &header.Users{}
+	wg.Add(NPartition)
+	var outerr = make([]error, NPartition)
+	for i := 0; i < NPartition; i++ {
+		go func(i int) {
+			defer wg.Done()
+			query := url.Values{}
+			start := time.Now()
+			query.Add("path", accid+"_"+strconv.Itoa(i)+"_v"+strconv.Itoa(version)+".dat")
+			query.Add("limit", strconv.Itoa(limit))
+			query.Add("order_by", orderby)
+			query.Add("anchor", anchor)
+
+			resp, err := http.Post(UserQueryURL+"?"+query.Encode(), "application/json", bytes.NewBuffer(body))
+			if err != nil {
+				outerr[i] = err
+				return
+			}
+
+			out, err := ioutil.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				outerr[i] = err
+				return
+			}
+
+			users := &header.Users{}
+			if err := json.Unmarshal(out, users); err != nil {
+				fmt.Println(accid, "NO1", query.Encode(), string(out), "\nBODY\n", string(body))
+				outerr[i] = header.E500(err, header.E_invalid_json, accid, i)
+				return
+			}
+
+			lock.Lock()
+			res = MergeUserResult(res, users, limit, orderby, defM)
+			lock.Unlock()
+			fmt.Println("OUT", i, len(out), time.Since(start))
+		}(i)
+	}
+	wg.Wait()
+	for _, err := range outerr {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
