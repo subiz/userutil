@@ -3,7 +3,6 @@ package userutil
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"math"
 	"net/http"
@@ -25,6 +24,10 @@ import (
 
 const Tolerance = 0.000001
 const NPartition = 50
+
+var httpclient = http.Client{
+	Timeout: 30 * time.Second,
+}
 
 func applyTextTransform(str string, transforms []*header.TextTransform) string {
 	if len(transforms) == 0 {
@@ -626,22 +629,24 @@ func evaluateSingleCond(acc *apb.Account, defM map[string]*header.AttributeDefin
 			return false
 		}
 
+		defType := def.GetType()
+
 		text, num, date, boo, list, found := FindAttr(u, key, def.Type)
-		if def.GetType() == "text" {
+		if defType == "text" {
 			return EvaluateText(found, text, cond.GetText())
 		}
 
-		if def.GetType() == "number" {
+		if defType == "number" {
 			return EvaluateFloat(found, num, cond.GetNumber())
 		}
-		if def.GetType() == "boolean" {
+		if defType == "boolean" {
 			return EvaluateBool(found, boo, cond.GetBoolean())
 		}
-		if def.GetType() == "datetime" { // consider number in ms
+		if defType == "datetime" { // consider number in ms
 			return EvaluateDatetime(acc, found, accid, date, cond.Datetime)
 		}
 
-		if def.GetType() == "list" {
+		if defType == "list" {
 			if cond.GetText().GetOp() == "any" {
 				return true
 			}
@@ -708,9 +713,11 @@ func PureCountUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*h
 		if u.Id == "" {
 			return
 		}
+
 		if u.PrimaryId != "" {
 			return
 		}
+
 		if ignoreIds[u.Id] {
 			return
 		}
@@ -754,7 +761,6 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 		orderby = orderby[1:]
 	}
 
-	start := time.Now()
 	out := make([]*header.User, 0)
 	var valM = map[string]string{}
 	anchorUserId := ""
@@ -795,9 +801,9 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 			// pass
 		}
 
-		total++
 		val := GetSortVal(orderby, u, defM)
 		lock.Lock()
+		total++
 		defer lock.Unlock()
 
 		valM[u.Id] = val
@@ -818,15 +824,11 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 		out = append(out, u)
 	}, 20)
 
-	fmt.Println("FILTER0", acc.GetId(), len(out), time.Since(start))
-
-	start = time.Now()
 	sort.Slice(out, func(i int, j int) bool {
 		return LessVal(out[i].Id, out[j].Id, valM, desc)
 	})
 
 	res := []*header.User{}
-	fmt.Println("FILTER SORT", acc.GetId(), time.Since(start), len(out), anchor)
 	for _, user := range out {
 		if len(res) >= limit {
 			break
@@ -999,8 +1001,7 @@ func GetSortVal(orderby string, user *header.User, defM map[string]*header.Attri
 	return val
 }
 
-const UserQueryURL = "https://user-query-66xno24cra-as.a.run.app/query"
-const UserCountURL = "https://user-query-66xno24cra-as.a.run.app/count"
+const UserQueryURL = "https://user-query-66xno24cra-as.a.run.app"
 
 func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, defM map[string]*header.AttributeDefinition, anchor, orderby string, limit int, ignoreIds []string) (*header.Users, error) {
 	accid := acc.GetId()
@@ -1020,13 +1021,12 @@ func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, def
 		go func(i int) {
 			defer wg.Done()
 			query := url.Values{}
-			start := time.Now()
 			query.Add("path", accid+"_"+strconv.Itoa(i)+"_v"+strconv.Itoa(version)+".dat")
 			query.Add("limit", strconv.Itoa(limit))
 			query.Add("order_by", orderby)
 			query.Add("anchor", anchor)
 
-			resp, err := http.Post(UserQueryURL+"?"+query.Encode(), "application/json", bytes.NewBuffer(body))
+			resp, err := httpclient.Post(UserQueryURL+"/query?"+query.Encode(), "application/json", bytes.NewBuffer(body))
 			if err != nil {
 				outerr[i] = err
 				return
@@ -1041,7 +1041,6 @@ func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, def
 
 			users := &header.Users{}
 			if err := json.Unmarshal(out, users); err != nil {
-				fmt.Println(accid, "NO1", query.Encode(), string(out), "\nBODY\n", string(body))
 				outerr[i] = header.E500(err, header.E_invalid_json, accid, i)
 				return
 			}
@@ -1049,7 +1048,6 @@ func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, def
 			lock.Lock()
 			res = MergeUserResult(res, users, limit, orderby, defM)
 			lock.Unlock()
-			fmt.Println("OUT", i, len(out), time.Since(start))
 		}(i)
 	}
 	wg.Wait()
@@ -1083,10 +1081,9 @@ func DoCount(version int, acc *apb.Account, conds []*header.UserViewCondition, d
 		go func(i int) {
 			defer wg.Done()
 			query := url.Values{}
-			start := time.Now()
 			query.Add("path", accid+"_"+strconv.Itoa(i)+"_v"+strconv.Itoa(version)+".dat")
 
-			resp, err := http.Post(UserCountURL+"?"+query.Encode(), "application/json", bytes.NewBuffer(body))
+			resp, err := httpclient.Post(UserQueryURL+"/count?"+query.Encode(), "application/json", bytes.NewBuffer(body))
 			if err != nil {
 				outerr[i] = err
 				return
@@ -1101,7 +1098,6 @@ func DoCount(version int, acc *apb.Account, conds []*header.UserViewCondition, d
 
 			segments := &header.Segments{}
 			if err := json.Unmarshal(out, segments); err != nil {
-				fmt.Println(accid, "NO1", query.Encode(), string(out), "\nBODY\n", string(body))
 				outerr[i] = header.E500(err, header.E_invalid_json, accid, i)
 				return
 			}
@@ -1111,7 +1107,6 @@ func DoCount(version int, acc *apb.Account, conds []*header.UserViewCondition, d
 				totals[j] = totals[j] + seg.GetTotal()
 			}
 			lock.Unlock()
-			fmt.Println("OUT", i, len(out), time.Since(start))
 		}(i)
 	}
 	wg.Wait()
