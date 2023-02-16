@@ -3,7 +3,7 @@ package userutil
 import (
 	"bytes"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -990,7 +990,7 @@ func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, def
 				return
 			}
 
-			out, err := ioutil.ReadAll(resp.Body)
+			out, err := io.ReadAll(resp.Body)
 			resp.Body.Close()
 			if err != nil {
 				outerr[i] = err
@@ -1047,7 +1047,7 @@ func DoCount(version int, acc *apb.Account, conds []*header.UserViewCondition, d
 				return
 			}
 
-			out, err := ioutil.ReadAll(resp.Body)
+			out, err := io.ReadAll(resp.Body)
 			resp.Body.Close()
 			if err != nil {
 				outerr[i] = err
