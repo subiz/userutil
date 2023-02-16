@@ -400,8 +400,8 @@ func EvaluateDatetime(acc *apb.Account, found bool, accid string, unixms int64, 
 		if len(cond.GetOutside()) != 2 {
 			return true
 		}
-		a := time.Unix(cond.GetOutside()[0]/1000, 0).Unix()
-		b := time.Unix(cond.GetOutside()[1]/1000, 0).Unix()
+		a := cond.GetOutside()[0] / 1000
+		b := cond.GetOutside()[1] / 1000
 		return t.Unix() <= a || b <= t.Unix()
 	}
 	return true
@@ -710,32 +710,11 @@ func PureCountUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*h
 	var total int64
 	executor.Async(len(leads), func(i int, lock *sync.Mutex) {
 		u := leads[i]
-		if u.Id == "" {
-			return
-		}
-
-		if u.PrimaryId != "" {
-			return
-		}
-
-		if ignoreIds[u.Id] {
+		if u.Id == "" || u.PrimaryId != "" || ignoreIds[u.Id] {
 			return
 		}
 		if !RsCheck(acc, defM, u, cond) {
-			if len(u.SecondaryIds) == 0 {
-				return
-			}
-			check := false
-			for _, sec := range u.Secondaries {
-				if RsCheck(acc, defM, sec, cond) {
-					check = true
-					break
-				}
-			}
-			if !check {
-				return
-			}
-			// pass
+			return
 		}
 
 		lock.Lock()
@@ -772,33 +751,12 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 	total := 0
 	executor.Async(len(leads), func(i int, lock *sync.Mutex) {
 		u := leads[i]
-		if u.Id == "" {
-			return
-		}
-
-		if u.PrimaryId != "" {
-			return
-		}
-
-		if ignoreIds[u.Id] {
+		if u.Id == "" || u.PrimaryId != "" || ignoreIds[u.Id] {
 			return
 		}
 
 		if !RsCheck(acc, defM, u, cond) {
-			if len(u.SecondaryIds) == 0 {
-				return
-			}
-			check := false
-			for _, sec := range u.Secondaries {
-				if RsCheck(acc, defM, sec, cond) {
-					check = true
-					break
-				}
-			}
-			if !check {
-				return
-			}
-			// pass
+			return
 		}
 
 		val := GetSortVal(orderby, u, defM)
