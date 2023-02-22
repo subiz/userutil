@@ -1017,6 +1017,56 @@ func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, def
 	return res, nil
 }
 
+func DoListUserInSegment(version int, accid string, segmentids []string) (map[string][]string, error) {
+	wg := sync.WaitGroup{}
+	lock := &sync.Mutex{}
+	wg.Add(NPartition)
+	var outerr = make([]error, NPartition)
+	outsegments := map[string][]string{}
+	for i := 0; i < NPartition; i++ {
+		go func(i int) {
+			defer wg.Done()
+			query := url.Values{}
+			query.Add("path", accid+"_"+strconv.Itoa(i)+"_v"+strconv.Itoa(version)+".dat")
+			query.Add("segments", strings.Join(segmentids, ","))
+			resp, err := httpclient.Get(UserQueryURL + "/list-segment-user?" + query.Encode())
+			if err != nil {
+				outerr[i] = err
+				return
+			}
+
+			out, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				outerr[i] = err
+				return
+			}
+
+			segments := &header.Segments{}
+			if err := json.Unmarshal(out, segments); err != nil {
+				outerr[i] = header.E500(err, header.E_invalid_json, accid, i)
+				return
+			}
+
+			lock.Lock()
+			for _, seg := range segments.GetSegments() {
+				segmentMembers := outsegments[seg.GetId()]
+				segmentMembers = append(segmentMembers, seg.Members...)
+				outsegments[seg.GetId()] = segmentMembers
+			}
+			lock.Unlock()
+		}(i)
+	}
+	wg.Wait()
+	for _, err := range outerr {
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return outsegments, nil
+}
+
 func DoCount(version int, acc *apb.Account, conds []*header.UserViewCondition, defM map[string]*header.AttributeDefinition, ignoreIds []string) ([]int64, error) {
 	if len(conds) == 0 {
 		return []int64{}, nil
