@@ -612,7 +612,7 @@ func evaluateSingleCond(acc *apb.Account, defM map[string]*header.AttributeDefin
 			}
 		}
 
-		if len(u.Labels) == 0 {
+		if len(u.Segments) == 0 {
 			if EvaluateText(false, "", cond.Text) {
 				return true
 			}
