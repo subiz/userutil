@@ -25,6 +25,10 @@ import (
 const Tolerance = 0.000001
 const NPartition = 50
 
+func ps(s string) *string {
+	return &s
+}
+
 var httpclient = http.Client{
 	Timeout: 30 * time.Second,
 }
@@ -965,7 +969,7 @@ func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, def
 	accid := acc.GetId()
 	userQuery := &header.UserQueryBody{
 		Condition:  cond,
-		Account:    &apb.Account{Id: &accid, Timezone: acc.Timezone, BusinessHours: acc.BusinessHours},
+		Account:    &apb.Account{Id: &accid, Timezone: ps(acc.GetTimezone()), BusinessHours: acc.GetBusinessHours()},
 		Def:        defM,
 		IgnoreUids: ignoreIds,
 	}
@@ -1074,7 +1078,7 @@ func DoCount(version int, acc *apb.Account, conds []*header.UserViewCondition, d
 	accid := acc.GetId()
 	userQuery := &header.UserCountBody{
 		Conditions: conds,
-		Account:    &apb.Account{Id: &accid, Timezone: acc.Timezone, BusinessHours: acc.BusinessHours},
+		Account:    &apb.Account{Id: &accid, Timezone: ps(acc.GetTimezone()), BusinessHours: acc.GetBusinessHours()},
 		Def:        defM,
 		IgnoreUids: ignoreIds,
 	}
