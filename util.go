@@ -1021,6 +1021,65 @@ func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, def
 	return res, nil
 }
 
+func DoFilterBatch(version int, acc *apb.Account, conds []*header.UserViewCondition, defM map[string]*header.AttributeDefinition, orderbys []string, limit int, ignoreIds []string) ([]*header.Users, error) {
+	if len(conds) == 0 {
+		return nil, nil
+	}
+	accid := acc.GetId()
+	userQuery := &header.UserQueryBody{
+		Conditions: conds,
+		Account:    &apb.Account{Id: &accid, Timezone: ps(acc.GetTimezone()), BusinessHours: acc.GetBusinessHours()},
+		Def:        defM,
+		IgnoreUids: ignoreIds,
+	}
+	body, _ := json.Marshal(userQuery)
+	wg := sync.WaitGroup{}
+	lock := &sync.Mutex{}
+	res := make([]*header.Users, len(conds))
+	wg.Add(NPartition)
+	var outerr = make([]error, NPartition)
+	for i := 0; i < NPartition; i++ {
+		go func(i int) {
+			defer wg.Done()
+			query := url.Values{}
+			query.Add("path", accid+"_"+strconv.Itoa(i)+"_v"+strconv.Itoa(version)+".dat")
+			query.Add("limit", strconv.Itoa(limit))
+			query.Add("order_bys", strings.Join(orderbys, ";"))
+
+			resp, err := httpclient.Post(UserQueryURL+"/query?"+query.Encode(), "application/json", bytes.NewBuffer(body))
+			if err != nil {
+				outerr[i] = err
+				return
+			}
+
+			out, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				outerr[i] = err
+				return
+			}
+
+			userss := []*header.Users{}
+			if err := json.Unmarshal(out, &userss); err != nil {
+				outerr[i] = header.E500(err, header.E_invalid_json, accid, i)
+				return
+			}
+			lock.Lock()
+			for i, users := range userss {
+				res[i] = MergeUserResult(res[i], users, limit, orderbys[i], defM)
+			}
+			lock.Unlock()
+		}(i)
+	}
+	wg.Wait()
+	for _, err := range outerr {
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
 func DoListUserInSegment(version int, accid string, segmentids []string) (map[string][]string, error) {
 	wg := sync.WaitGroup{}
 	lock := &sync.Mutex{}
