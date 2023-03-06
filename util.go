@@ -1046,7 +1046,7 @@ func DoFilterBatch(version int, acc *apb.Account, conds []*header.UserViewCondit
 			query.Add("limit", strconv.Itoa(limit))
 			query.Add("order_bys", strings.Join(orderbys, ";"))
 
-			resp, err := httpclient.Post(UserQueryURL+"/query?"+query.Encode(), "application/json", bytes.NewBuffer(body))
+			resp, err := httpclient.Post(UserQueryURL+"/batch-query?"+query.Encode(), "application/json", bytes.NewBuffer(body))
 			if err != nil {
 				outerr[i] = err
 				return
