@@ -25,13 +25,9 @@ import (
 const Tolerance = 0.000001
 const NPartition = 50
 
-func ps(s string) *string {
-	return &s
-}
+func ps(s string) *string { return &s }
 
-var httpclient = http.Client{
-	Timeout: 30 * time.Second,
-}
+var httpclient = http.Client{Timeout: 30 * time.Second}
 
 func applyTextTransform(str string, transforms []*header.TextTransform) string {
 	if len(transforms) == 0 {
@@ -411,10 +407,10 @@ func EvaluateDatetime(acc *apb.Account, found bool, accid string, unixms int64, 
 	return true
 }
 
-func RsCheck(acc *apb.Account, defM map[string]*header.AttributeDefinition, u *header.User, cond *header.UserViewCondition) bool {
+func RsCheck(acc *apb.Account, defM map[string]*header.AttributeDefinition, u *header.User, cond *header.UserViewCondition, deleted bool) bool {
 	if len(cond.GetOne()) > 0 {
 		for _, c := range cond.GetOne() {
-			if RsCheck(acc, defM, u, c) {
+			if RsCheck(acc, defM, u, c, deleted) {
 				return true
 			}
 		}
@@ -423,16 +419,24 @@ func RsCheck(acc *apb.Account, defM map[string]*header.AttributeDefinition, u *h
 
 	if len(cond.GetAll()) > 0 {
 		for _, c := range cond.GetAll() {
-			if !RsCheck(acc, defM, u, c) {
+			if !RsCheck(acc, defM, u, c, deleted) {
 				return false
 			}
 		}
 		return true
 	}
-	return evaluateSingleCond(acc, defM, u, cond)
+	return evaluateSingleCond(acc, defM, u, cond, deleted)
 }
 
-func evaluateSingleCond(acc *apb.Account, defM map[string]*header.AttributeDefinition, u *header.User, cond *header.UserViewCondition) bool {
+func evaluateSingleCond(acc *apb.Account, defM map[string]*header.AttributeDefinition, u *header.User, cond *header.UserViewCondition, deleted bool) bool {
+	if deleted && u.Deleted == 0 {
+		return false
+	}
+
+	if !deleted && u.Deleted > 0 {
+		return false
+	}
+
 	accid := u.GetAccountId()
 	if cond.GetKey() == "id" {
 		id := u.GetId()
@@ -717,7 +721,7 @@ func PureCountUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*h
 		if u.Id == "" || u.PrimaryId != "" || ignoreIds[u.Id] {
 			return
 		}
-		if !RsCheck(acc, defM, u, cond) {
+		if !RsCheck(acc, defM, u, cond, cond.Deleted) {
 			return
 		}
 
@@ -759,7 +763,7 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 			return
 		}
 
-		if !RsCheck(acc, defM, u, cond) {
+		if !RsCheck(acc, defM, u, cond, cond.Deleted) {
 			return
 		}
 
