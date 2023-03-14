@@ -639,7 +639,10 @@ func evaluateSingleCond(acc *apb.Account, defM map[string]*header.AttributeDefin
 
 		defType := def.GetType()
 
-		text, num, date, boo, list, found := FindAttr(u, key, def.Type)
+		if defType == "list" || defType == "" {
+			defType = "text"
+		}
+		text, num, date, boo, found := FindAttr(u, key, def.Type)
 		if defType == "text" {
 			return EvaluateText(found, text, cond.GetText())
 		}
@@ -653,43 +656,11 @@ func evaluateSingleCond(acc *apb.Account, defM map[string]*header.AttributeDefin
 		if defType == "datetime" { // consider number in ms
 			return EvaluateDatetime(acc, found, accid, date, cond.Datetime)
 		}
-
-		if defType == "list" {
-			if cond.GetText().GetOp() == "any" {
-				return true
-			}
-
-			if !found {
-				if cond.GetText().GetOp() == "is_empty" {
-					return true
-				}
-
-				if cond.GetText().GetOp() == "has_value" {
-					return false
-				}
-				return false
-			}
-
-			if cond.GetText().GetOp() == "is_empty" {
-				return len(list) == 0
-			}
-
-			if cond.GetText().GetOp() == "has_value" {
-				return len(list) > 0
-			}
-
-			for _, item := range list {
-				if EvaluateText(true, item, cond.Text) {
-					return true
-				}
-			}
-			return false
-		}
 	}
 	return true
 }
 
-func FindAttr(u *header.User, key string, typ string) (string, float64, int64, bool, []string, bool) {
+func FindAttr(u *header.User, key string, typ string) (string, float64, int64, bool, bool) {
 	for _, a := range u.Attributes {
 		if a.Key != key {
 			continue
@@ -700,18 +671,14 @@ func FindAttr(u *header.User, key string, typ string) (string, float64, int64, b
 		}
 
 		text := a.Text
-		list := a.List
-		if text != "" {
-			list = append(list, text)
-			list = append(list, a.OtherValues...)
-		}
+		// backward compatible
 		if text == "" && len(a.List) > 0 {
 			text = a.List[0]
 		}
 
-		return text, a.Number, t.UnixMilli(), a.Boolean, list, true
+		return text, a.Number, t.UnixMilli(), a.Boolean, true
 	}
-	return "", 0, 0, false, nil, false
+	return "", 0, 0, false, false
 }
 
 func SpaceStringsBuilder(str string) string {
@@ -952,8 +919,8 @@ func GetSortVal(orderby string, user *header.User, defM map[string]*header.Attri
 		key := orderby[5:]
 		def := defM[key]
 		if def != nil {
-			text, num, date, boo, list, _ := FindAttr(user, key, def.Type)
-			if def.Type == "text" || def.Type == "" {
+			text, num, date, boo, _ := FindAttr(user, key, def.Type)
+			if def.Type == "text" || def.Type == "" || def.Type == "list" {
 				val = "s" + text
 			}
 			if def.Type == "number" {
@@ -968,10 +935,6 @@ func GetSortVal(orderby string, user *header.User, defM map[string]*header.Attri
 			}
 			if def.Type == "datetime" { // consider number in ms
 				val = "s" + time.Unix(date/1000, 0).Format(time.RFC3339)
-			}
-
-			if def.GetType() == "list" {
-				val = "l" + strconv.Itoa(len(list)) + "." + strings.Join(list, ",")
 			}
 		}
 	}
