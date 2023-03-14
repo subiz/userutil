@@ -698,7 +698,18 @@ func FindAttr(u *header.User, key string, typ string) (string, float64, int64, b
 		if err != nil {
 			t = time.Unix(0, 0)
 		}
-		return a.Text, a.Number, t.UnixMilli(), a.Boolean, append([]string{a.Text}, a.OtherValues...), true
+
+		text := a.Text
+		list := a.List
+		if text != "" {
+			list = append(list, text)
+			list = append(list, a.OtherValues...)
+		}
+		if text == "" && len(a.List) > 0 {
+			text = a.List[0]
+		}
+
+		return text, a.Number, t.UnixMilli(), a.Boolean, list, true
 	}
 	return "", 0, 0, false, nil, false
 }
