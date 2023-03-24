@@ -295,24 +295,34 @@ func EvaluateDatetime(acc *apb.Account, found bool, accid string, unixms int64, 
 			return true
 		}
 		return false
+	case "date_last_30mins":
+		now := time.Now().Unix()
+		last30mins := now - 1800
+		return last30mins <= t.Unix() && t.Unix() <= now
+	case "date_last_2hours":
+		now := time.Now().Unix()
+		last2hours := now - 7200
+		return last2hours <= t.Unix() && t.Unix() <= now
+	case "date_last_24h":
+		now := time.Now().Unix()
+		last1days := now - 86400
+		return last1days <= t.Unix() && t.Unix() <= now
+	case "date_last_7days":
+		now := time.Now().Unix()
+		last7days := now - 7*86400
+		return last7days <= t.Unix() && t.Unix() <= now
+	case "date_last_30days":
+		now := time.Now().Unix()
+		last30days := now - 30*86400
+		return last30days <= t.Unix() && t.Unix() <= now
 	case "yesterday":
 		utc := time.Now().UTC()
-		startoftheday := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, utc.Location())
-		weekday := int64(startoftheday.Weekday())
-		weekday--
-		if weekday == -1 {
-			weekday = 7
-		}
-		startoftheweek := time.Unix(startoftheday.Unix()-weekday*86400, 0)
-		endoftheweek := time.Unix(startoftheday.Unix()*(7-weekday)*86400+86400, 0)
-		// endoftheday := time.Date(utc.Year(), utc.Month(), utc.Day(), 23, 59, 59, 0, utc.Location())
+		startoftheday := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, utc.Location()).Unix()
+		startofyesterday := startoftheday - 86400
 
 		h, m, _ := business_hours.SplitTzOffset(acc.GetTimezone())
 		tzsec := int64(h*3600 + m*60)
-		if startoftheweek.Unix()+tzsec <= t.Unix() && t.Unix() <= endoftheweek.Unix()+tzsec {
-			return true
-		}
-		return false
+		return startofyesterday+tzsec <= t.Unix() && t.Unix() <= startoftheday+tzsec
 	case "last_week":
 		utc := time.Now().UTC()
 		startoftheday := time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, utc.Location())
