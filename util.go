@@ -225,6 +225,176 @@ func EvaluateText(has bool, str string, cond *header.TextCondition) bool {
 	return true
 }
 
+func EvaluateTexts(strs []string, cond *header.TextCondition) bool {
+	if len(cond.GetTransforms()) > 0 {
+		for i, str := range strs {
+			strs[i] = applyTextTransform(str, cond.GetTransforms())
+		}
+	}
+
+	if !cond.GetCaseSensitive() {
+		for i, str := range strs {
+			strs[i] = strings.ToLower(str)
+		}
+	}
+	if !cond.GetAccentSensitive() {
+		for i, str := range strs {
+			strs[i] = ascii.Convert(str)
+		}
+	}
+
+	switch cond.GetOp() {
+	case "any":
+		return true
+	case "has_value":
+		return len(strs) == 0
+	case "is_empty":
+		return len(strs) == 0
+	case "eq":
+		if len(cond.GetEq()) == 0 {
+			return true
+		}
+		for _, cs := range cond.GetEq() {
+			if !cond.GetCaseSensitive() {
+				cs = strings.ToLower(cs)
+			}
+			if !cond.GetAccentSensitive() {
+				cs = ascii.Convert(cs)
+			}
+			for _, str := range strs {
+
+				if strings.TrimSpace(str) == strings.TrimSpace(cs) {
+					return true
+				}
+			}
+		}
+		return false
+	case "neq":
+		if len(cond.GetNeq()) == 0 {
+			return true
+		}
+
+		for _, cs := range cond.GetNeq() {
+			if !cond.GetCaseSensitive() {
+				cs = strings.ToLower(cs)
+			}
+			if !cond.GetAccentSensitive() {
+				cs = ascii.Convert(cs)
+			}
+			for _, str := range strs {
+				if strings.TrimSpace(str) == strings.TrimSpace(cs) {
+					return false
+				}
+			}
+		}
+		return true
+	case "regex":
+		for _, str := range strs {
+			if b, _ := regexp.MatchString(cond.GetRegex(), str); b {
+				return true
+			}
+			return false
+		}
+	case "start_with":
+		for _, cs := range cond.GetStartWith() {
+			if !cond.GetCaseSensitive() {
+				cs = strings.ToLower(cs)
+			}
+			if !cond.GetAccentSensitive() {
+				cs = ascii.Convert(cs)
+			}
+			for _, str := range strs {
+				if strings.HasPrefix(strings.TrimSpace(str), strings.TrimSpace(cs)) {
+					return true
+				}
+			}
+		}
+		return false
+
+	case "end_with":
+		for _, cs := range cond.GetEndWith() {
+			if !cond.GetCaseSensitive() {
+				cs = strings.ToLower(cs)
+			}
+			if !cond.GetAccentSensitive() {
+				cs = ascii.Convert(cs)
+			}
+
+			for _, str := range strs {
+				if strings.HasSuffix(strings.TrimSpace(str), strings.TrimSpace(cs)) {
+					return true
+				}
+			}
+		}
+		return false
+	case "contain":
+		for _, cs := range cond.GetContain() {
+			if !cond.GetCaseSensitive() {
+				cs = strings.ToLower(cs)
+			}
+			if !cond.GetAccentSensitive() {
+				cs = ascii.Convert(cs)
+			}
+			for _, str := range strs {
+				if strings.Contains(strings.TrimSpace(str), strings.TrimSpace(cs)) {
+					return true
+				}
+			}
+		}
+		return false
+	case "not_contain":
+		for _, cs := range cond.GetNotContain() {
+			if !cond.GetCaseSensitive() {
+				cs = strings.ToLower(cs)
+			}
+			if !cond.GetAccentSensitive() {
+				cs = ascii.Convert(cs)
+			}
+			for _, str := range strs {
+				if strings.Contains(strings.TrimSpace(str), strings.TrimSpace(cs)) {
+					return false
+				}
+			}
+		}
+		return true
+	case "not_start_with":
+		for _, cs := range cond.GetNotStartWith() {
+			if !cond.GetCaseSensitive() {
+				cs = strings.ToLower(cs)
+			}
+			if !cond.GetAccentSensitive() {
+				cs = ascii.Convert(cs)
+			}
+			for _, str := range strs {
+				if strings.HasPrefix(strings.TrimSpace(str), strings.TrimSpace(cs)) {
+					return false
+				}
+			}
+		}
+		return true
+	case "not_end_with":
+
+		for _, cs := range cond.GetEndWith() {
+			if !cond.GetCaseSensitive() {
+				cs = strings.ToLower(cs)
+			}
+			if !cond.GetAccentSensitive() {
+				cs = ascii.Convert(cs)
+			}
+			for _, str := range strs {
+				if strings.HasSuffix(strings.TrimSpace(str), strings.TrimSpace(cs)) {
+					return false
+				}
+			}
+		}
+		return true
+	default:
+		return true
+	}
+
+	return true
+}
+
 func EvaluateFloat(found bool, fl float64, cond *header.FloatCondition) bool {
 	fl = applyFloatTransform(fl, cond.GetTransforms())
 
@@ -532,21 +702,6 @@ func evaluateSingleCond(acc *apb.Account, defM map[string]*header.AttributeDefin
 		return false
 	}
 
-	if cond.GetKey() == "labels" {
-		for _, label := range u.Labels {
-			if EvaluateText(true, label.Label, cond.Text) {
-				return true
-			}
-		}
-
-		if len(u.Labels) == 0 {
-			if EvaluateText(false, "", cond.Text) {
-				return true
-			}
-		}
-		return false
-	}
-
 	if cond.GetKey() == "start_content_view:by:device:ip" {
 		return EvaluateText(u.StartContentView != nil, u.GetStartContentView().GetBy().GetDevice().GetIp(), cond.Text)
 	}
@@ -649,19 +804,21 @@ func evaluateSingleCond(acc *apb.Account, defM map[string]*header.AttributeDefin
 		return EvaluateText(u.FirstContentView != nil, u.GetFirstContentView().GetBy().GetDevice().GetUtm().GetContent(), cond.Text)
 	}
 
-	if cond.GetKey() == "segment" {
-		for _, seg := range u.Segments {
-			if EvaluateText(true, seg.GetSegmentId(), cond.Text) {
-				return true
-			}
+	if cond.GetKey() == "labels" {
+		labels := []string{}
+		for _, label := range u.Labels {
+			labels = append(labels, label.Label)
 		}
 
-		if len(u.Segments) == 0 {
-			if EvaluateText(false, "", cond.Text) {
-				return true
-			}
+		return EvaluateTexts(labels, cond.Text)
+	}
+
+	if cond.GetKey() == "segment" {
+		segs := []string{}
+		for _, seg := range u.Segments {
+			segs = append(segs, seg.GetSegmentId())
 		}
-		return false
+		return EvaluateTexts(segs, cond.Text)
 	}
 
 	if strings.HasPrefix(cond.GetKey(), "attr:") || strings.HasPrefix(cond.GetKey(), "attr.") {
