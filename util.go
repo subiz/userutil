@@ -19,6 +19,7 @@ import (
 	"github.com/subiz/goutils/business_hours"
 	"github.com/subiz/header"
 	apb "github.com/subiz/header/account"
+	"github.com/subiz/log"
 	"github.com/thanhpk/ascii"
 )
 
@@ -74,6 +75,9 @@ func EvaluateText(has bool, str string, cond *header.TextCondition) bool {
 		if len(cond.GetEq()) == 0 {
 			return true
 		}
+		if !has {
+			return false
+		}
 		for _, cs := range cond.GetEq() {
 			if !cond.GetCaseSensitive() {
 				cs = strings.ToLower(cs)
@@ -106,8 +110,15 @@ func EvaluateText(has bool, str string, cond *header.TextCondition) bool {
 		}
 		return true
 	case "regex":
+		if !has {
+			return false
+		}
+
 		regexp.MatchString(cond.GetRegex(), str)
 	case "start_with":
+		if !has {
+			return false
+		}
 		for _, cs := range cond.GetStartWith() {
 			if !cond.GetCaseSensitive() {
 				cs = strings.ToLower(cs)
@@ -123,6 +134,9 @@ func EvaluateText(has bool, str string, cond *header.TextCondition) bool {
 		return false
 
 	case "end_with":
+		if !has {
+			return false
+		}
 		for _, cs := range cond.GetEndWith() {
 			if !cond.GetCaseSensitive() {
 				cs = strings.ToLower(cs)
@@ -137,6 +151,9 @@ func EvaluateText(has bool, str string, cond *header.TextCondition) bool {
 		}
 		return false
 	case "contain":
+		if !has {
+			return false
+		}
 		for _, cs := range cond.GetContain() {
 			if !cond.GetCaseSensitive() {
 				cs = strings.ToLower(cs)
@@ -151,6 +168,9 @@ func EvaluateText(has bool, str string, cond *header.TextCondition) bool {
 		}
 		return false
 	case "not_contain":
+		if !has {
+			return false
+		}
 		for _, cs := range cond.GetNotContain() {
 			if !cond.GetCaseSensitive() {
 				cs = strings.ToLower(cs)
@@ -165,6 +185,9 @@ func EvaluateText(has bool, str string, cond *header.TextCondition) bool {
 		}
 		return true
 	case "not_start_with":
+		if !has {
+			return false
+		}
 		for _, cs := range cond.GetNotStartWith() {
 			if !cond.GetCaseSensitive() {
 				cs = strings.ToLower(cs)
@@ -179,6 +202,9 @@ func EvaluateText(has bool, str string, cond *header.TextCondition) bool {
 		}
 		return true
 	case "not_end_with":
+		if !has {
+			return false
+		}
 		for _, cs := range cond.GetEndWith() {
 			if !cond.GetCaseSensitive() {
 				cs = strings.ToLower(cs)
@@ -991,7 +1017,7 @@ func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, def
 
 			users := &header.Users{}
 			if err := json.Unmarshal(out, users); err != nil {
-				outerr[i] = header.E500(err, header.E_invalid_json, accid, i)
+				outerr[i] = log.EData(err, out, log.M{"accid": accid, "i": i})
 				return
 			}
 
@@ -1049,7 +1075,7 @@ func DoFilterBatch(version int, acc *apb.Account, conds []*header.UserViewCondit
 
 			userss := []*header.Users{}
 			if err := json.Unmarshal(out, &userss); err != nil {
-				outerr[i] = header.E500(err, header.E_invalid_json, accid, i)
+				outerr[i] = log.EData(err, out, log.M{"accid": accid, "i": i})
 				return
 			}
 			lock.Lock()
@@ -1095,7 +1121,7 @@ func DoListUserInSegment(version int, accid string, segmentids []string) (map[st
 
 			segments := &header.Segments{}
 			if err := json.Unmarshal(out, segments); err != nil {
-				outerr[i] = header.E500(err, header.E_invalid_json, accid, i)
+				outerr[i] = log.EData(err, out, log.M{"accid": accid, "i": i})
 				return
 			}
 
@@ -1157,7 +1183,7 @@ func DoCount(version int, acc *apb.Account, conds []*header.UserViewCondition, d
 
 			segments := &header.Segments{}
 			if err := json.Unmarshal(out, segments); err != nil {
-				outerr[i] = header.E500(err, header.E_invalid_json, accid, i)
+				outerr[i] = log.EData(err, out, log.M{"accid": accid, "i": i})
 				return
 			}
 
