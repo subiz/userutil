@@ -67,9 +67,9 @@ func EvaluateText(has bool, str string, cond *header.TextCondition) bool {
 	case "any":
 		return true
 	case "has_value":
-		return str != ""
+		return has
 	case "is_empty":
-		return str == ""
+		return strings.TrimSpace(str) == ""
 	case "eq":
 		if len(cond.GetEq()) == 0 {
 			return true
