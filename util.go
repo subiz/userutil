@@ -909,6 +909,8 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 		orderby = "-id"
 	}
 
+	// "-segment_joined"
+
 	desc := false
 	if orderby[0] != '-' && orderby[0] != '+' {
 		desc = true
@@ -927,6 +929,16 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 		anchorUserId = anchorsplit[len(anchorsplit)-1]
 		valM[anchorUserId] = strings.Join(anchorsplit[:len(anchorsplit)-1], ".")
 	}
+
+	// segment
+	segmentid := ""
+	for _, cond := range cond.GetAll() {
+		if cond.GetKey() == "segment" && cond.GetText().GetOp() == "eq" && len(cond.GetText().GetEq()) > 0 {
+			segmentid = cond.GetText().GetEq()[0]
+			break
+		}
+	}
+
 	total := 0
 	executor.Async(len(leads), func(i int, lock *sync.Mutex) {
 		u := leads[i]
@@ -938,7 +950,13 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 			return
 		}
 
-		val := GetSortVal(orderby, u, defM)
+		val := ""
+		if orderby == "+segment_joined" || orderby == "-segment_joined" {
+			val = GetSortValSegmentId(segmentid, u)
+		} else {
+			val = GetSortVal(orderby, u, defM)
+		}
+
 		lock.Lock()
 		total++
 		defer lock.Unlock()
@@ -980,7 +998,7 @@ func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*
 	return &header.Users{Users: res, Hit: int64(len(res)), Total: int64(total), Anchor: anchor}
 }
 
-func MergeUserResult(dst, src *header.Users, limit int, orderby string, defM map[string]*header.AttributeDefinition) *header.Users {
+func MergeUserResult(dst, src *header.Users, limit int, segmentid, orderby string, defM map[string]*header.AttributeDefinition) *header.Users {
 	if orderby == "" {
 		orderby = "-id"
 	}
@@ -1012,7 +1030,13 @@ func MergeUserResult(dst, src *header.Users, limit int, orderby string, defM map
 	var valM = map[string]string{}
 	out := []*header.User{}
 	for _, user := range userm {
-		val := GetSortVal(orderby, user, defM)
+
+		val := ""
+		if orderby == "+segment_joined" || orderby == "-segment_joined" {
+			val = GetSortValSegmentId(segmentid, user)
+		} else {
+			val = GetSortVal(orderby, user, defM)
+		}
 		valM[user.Id] = val
 		out = append(out, user)
 	}
@@ -1085,6 +1109,20 @@ func LessVal(iid, jid string, valM map[string]string, desc bool) bool {
 	return less
 }
 
+func GetSortValSegmentId(segmentid string, user *header.User) string {
+	if segmentid == "" {
+		return "f" + user.Id
+	}
+
+	for _, segment := range user.Segments {
+		if segment.SegmentId == segmentid {
+			return "f" + strconv.Itoa(int(segment.Created))
+		}
+	}
+
+	return "f0"
+}
+
 func GetSortVal(orderby string, user *header.User, defM map[string]*header.AttributeDefinition) string {
 	if orderby == "" {
 		orderby = "id"
@@ -1150,6 +1188,15 @@ func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, def
 	res := &header.Users{}
 	wg.Add(NPartition)
 	var outerr = make([]error, NPartition)
+
+	segmentid := ""
+	for _, cond := range cond.GetAll() {
+		if cond.GetKey() == "segment" && cond.GetText().GetOp() == "eq" && len(cond.GetText().GetEq()) > 0 {
+			segmentid = cond.GetText().GetEq()[0]
+			break
+		}
+	}
+
 	for i := 0; i < NPartition; i++ {
 		go func(i int) {
 			defer wg.Done()
@@ -1179,7 +1226,7 @@ func DoFilter(version int, acc *apb.Account, cond *header.UserViewCondition, def
 			}
 
 			lock.Lock()
-			res = MergeUserResult(res, users, limit, orderby, defM)
+			res = MergeUserResult(res, users, limit, segmentid, orderby, defM)
 			lock.Unlock()
 		}(i)
 	}
@@ -1209,6 +1256,7 @@ func DoFilterBatch(version int, acc *apb.Account, conds []*header.UserViewCondit
 	res := make([]*header.Users, len(conds))
 	wg.Add(NPartition)
 	var outerr = make([]error, NPartition)
+
 	for i := 0; i < NPartition; i++ {
 		go func(i int) {
 			defer wg.Done()
@@ -1237,7 +1285,16 @@ func DoFilterBatch(version int, acc *apb.Account, conds []*header.UserViewCondit
 			}
 			lock.Lock()
 			for i, users := range userss {
-				res[i] = MergeUserResult(res[i], users, limit, orderbys[i], defM)
+				segmentid := ""
+				if len(conds) > i {
+					for _, cond := range conds[i].GetAll() {
+						if cond.GetKey() == "segment" && cond.GetText().GetOp() == "eq" && len(cond.GetText().GetEq()) > 0 {
+							segmentid = cond.GetText().GetEq()[0]
+							break
+						}
+					}
+				}
+				res[i] = MergeUserResult(res[i], users, limit, segmentid, orderbys[i], defM)
 			}
 			lock.Unlock()
 		}(i)

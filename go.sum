@@ -7,8 +7,8 @@ github.com/subiz/executor/v2 v2.0.3 h1:sjUGypL5n/L+i6EhhF1TeHvofKXcHzqbBGkLWgYTp
 github.com/subiz/executor/v2 v2.0.3/go.mod h1:OtujicyEl4kgUnQX+8GV2alYtS27qV7UtOt3MUh8NIg=
 github.com/subiz/goutils v0.1.16 h1:FMly+ZxdA8PDfYtsIev28queRiIqtMvGtJuY0+w0jdg=
 github.com/subiz/goutils v0.1.16/go.mod h1:PExK897ex/PxMW0ucopKoIP0zfl6VJQ4MBpTb6Acubk=
-github.com/subiz/header v1.11.59 h1:oB+Hv/s9oX/kELCsfKVywmkHRpTj0tY6n1fvPqfyKqM=
-github.com/subiz/header v1.11.59/go.mod h1:Pm/6rHSKIcdCEftXjHPcimh5HFrtjYTXj/VkML91dYs=
+github.com/subiz/header v1.11.69 h1:PH0r4xTls47rkB7qRx8KVjRYqHRnZAGh6nZg1+4Y+dw=
+github.com/subiz/header v1.11.69/go.mod h1:Pm/6rHSKIcdCEftXjHPcimh5HFrtjYTXj/VkML91dYs=
 github.com/subiz/log v0.0.21 h1:y8GG/dyeQImWj48kuijDjE/DazWuNUVoym1DfBVIJ0U=
 github.com/subiz/log v0.0.21/go.mod h1:44Ru12rE8+wjPtAAy6N/rV0ldiPVAm4KAA3fhUecVnI=
 github.com/thanhpk/ascii v0.0.4 h1:fu/NHc8cNNnncA0aBsxFDT+KboCAD0+ITRi72B6e84M=
