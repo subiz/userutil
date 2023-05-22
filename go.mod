@@ -5,8 +5,8 @@ go 1.20
 require (
 	github.com/subiz/executor/v2 v2.0.3
 	github.com/subiz/goutils v0.1.16
-	github.com/subiz/header v1.12.4
-	github.com/subiz/log v0.0.24
+	github.com/subiz/header v1.12.18
+	github.com/subiz/log v0.0.30
 	github.com/thanhpk/ascii v0.0.4
 )
 

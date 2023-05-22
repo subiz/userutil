@@ -905,6 +905,9 @@ func PureCountUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*h
 }
 
 func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*header.User, anchor string, limit int, orderby string, defM map[string]*header.AttributeDefinition, ignoreIds map[string]bool) *header.Users {
+	if cond == nil {
+		cond = &header.UserViewCondition{}
+	}
 	if orderby == "" {
 		orderby = "-id"
 	}
