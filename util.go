@@ -864,11 +864,6 @@ func FindAttr(u *header.User, key string, typ string) (string, float64, int64, b
 		}
 
 		text := a.Text
-		// backward compatible
-		if text == "" && len(a.List) > 0 {
-			text = a.List[0]
-		}
-
 		return text, a.Number, t.UnixMilli(), a.Boolean, true
 	}
 	return "", 0, 0, false, false
@@ -883,25 +878,6 @@ func SpaceStringsBuilder(str string) string {
 		}
 	}
 	return b.String()
-}
-
-func PureCountUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*header.User, defM map[string]*header.AttributeDefinition, ignoreIds map[string]bool) int64 {
-	var total int64
-	executor.Async(len(leads), func(i int, lock *sync.Mutex) {
-		u := leads[i]
-		if u.Id == "" || u.PrimaryId != "" || ignoreIds[u.Id] {
-			return
-		}
-		if !RsCheck(acc, defM, u, cond, cond.Deleted) {
-			return
-		}
-
-		lock.Lock()
-		total++
-		lock.Unlock()
-	}, 20)
-
-	return total
 }
 
 func PureFilterUsers(acc *apb.Account, cond *header.UserViewCondition, leads []*header.User, anchor string, limit int, orderby string, defM map[string]*header.AttributeDefinition, ignoreIds map[string]bool) *header.Users {
@@ -1033,7 +1009,6 @@ func MergeUserResult(dst, src *header.Users, limit int, segmentid, orderby strin
 	var valM = map[string]string{}
 	out := []*header.User{}
 	for _, user := range userm {
-
 		val := ""
 		if orderby == "+segment_joined" || orderby == "-segment_joined" {
 			val = GetSortValSegmentId(segmentid, user)
